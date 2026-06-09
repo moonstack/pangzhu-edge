@@ -1,0 +1,7 @@
+node_modules/
+host/config.json
+scripts/run-host.cmd
+scripts/com.pagetalk.host.json
+*.log
+docs/store/
+docs/superpowers/

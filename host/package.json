@@ -1,0 +1,9 @@
+{
+  "name": "pagetalk-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test --test-force-exit test/framing.test.js && node --test --test-force-exit test/claude-session.test.js && node --test --test-force-exit test/host.test.js"
+  }
+}

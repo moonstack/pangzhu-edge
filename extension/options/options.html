@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="options.css" />
+  <title>旁注 · 设置</title>
+</head>
+<body>
+  <div class="wrap">
+    <header class="head">
+      <span class="logo">◆</span>
+      <h1>旁注 · 设置</h1>
+      <span id="saved" class="saved" hidden>已保存 ✓</span>
+    </header>
+
+    <section class="card">
+      <h2>放权动手</h2>
+      <label class="field">
+        <span class="label">工作目录</span>
+        <input id="actDir" type="text" spellcheck="false" placeholder="例如 C:\Users\你\PageTalk\workspace" />
+        <span class="hint">Claude 在「放权动手」时<strong>只能</strong>在此目录内读写文件,不会执行命令、不会越界。留空则用默认目录。</span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>对话</h2>
+      <label class="field">
+        <span class="label">默认回答语言</span>
+        <select id="defaultLang">
+          <option value="中">中文</option>
+          <option value="EN">English</option>
+        </select>
+        <span class="hint">侧边栏右上角仍可随时临时切换。</span>
+      </label>
+      <label class="field row">
+        <input id="defaultWeb" type="checkbox" />
+        <span>
+          <span class="label">默认开启联网搜索</span>
+          <span class="hint">开启后每次打开侧边栏都让 Claude 可上网查证(较慢,走你的订阅)。</span>
+        </span>
+      </label>
+    </section>
+
+    <p class="foot">设置即时生效并自动保存;已打开的侧边栏会自动同步。</p>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

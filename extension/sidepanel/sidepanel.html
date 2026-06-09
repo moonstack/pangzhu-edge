@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="sidepanel.css" />
+  <title>旁注</title>
+</head>
+<body>
+  <header id="bar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◆</span>
+      <span class="title">旁注</span>
+      <span id="status" class="status">连接中…</span>
+    </div>
+    <div class="actions">
+      <button id="lang" class="iconbtn" type="button" title="切换回答语言(中 / EN)">中</button>
+      <button id="settings" class="iconbtn" type="button" title="设置" aria-label="设置">⚙</button>
+      <button id="newchat" class="iconbtn" type="button" title="新对话" aria-label="新对话">＋</button>
+    </div>
+  </header>
+
+  <div id="ctxbar" title="正在读哪个页面">
+    <span id="ctxtitle" class="ctx-title">当前页面…</span>
+    <button id="lock" class="lock" type="button">🔓</button>
+  </div>
+
+  <div id="quickbar">
+    <button class="chip" data-act="summary" type="button">总结</button>
+    <button class="chip" data-act="translate" type="button">翻译</button>
+    <button class="chip" data-act="keypoints" type="button">要点</button>
+    <button class="chip" data-act="outline" type="button">大纲</button>
+    <button class="chip" data-act="data" type="button">挑数据</button>
+    <button class="chip" data-act="factcheck" type="button">核查</button>
+    <button class="chip" id="multitab" type="button" title="对比当前窗口打开的多个网页">多页对比</button>
+  </div>
+
+  <div id="actbar" class="actbar" hidden>
+    <span class="act-ico" aria-hidden="true">🛠</span>
+    <span class="act-label">动手</span>
+    <span class="act-dir-wrap" title="工作目录:只能在此目录内读写文件,不会执行命令">
+      <span id="actdir" class="act-dir">…</span>
+    </span>
+    <button id="actdir-edit" class="act-edit" type="button" title="修改工作目录">改</button>
+  </div>
+
+  <main id="transcript" aria-live="polite">
+    <div id="empty" class="empty">
+      <div class="empty-logo">◆</div>
+      <p>上方一键处理这一页,<br/>或在下面就这页直接发问。</p>
+    </div>
+  </main>
+
+  <footer id="composer">
+    <textarea id="input" rows="1" placeholder="就这页问点什么…"></textarea>
+    <div class="composer-tools">
+      <button id="web" class="iconbtn" type="button" title="联网:让它上网查证(较慢,走你的订阅)">🌐</button>
+      <button id="actmode" class="iconbtn" type="button" title="动手:让它在指定目录内读写文件(计划→批准→执行)">🛠</button>
+      <button id="vision" class="iconbtn" type="button" title="看图:发送时附带当前屏幕截图">📷</button>
+      <span class="grow"></span>
+      <button id="send" class="sendbtn" type="button" title="发送" aria-label="发送">↑</button>
+    </div>
+  </footer>
+
+  <script src="../lib/purify.min.js"></script>
+  <script src="../lib/marked.min.js"></script>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
