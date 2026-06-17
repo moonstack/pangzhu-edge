@@ -1,4 +1,5 @@
 import { composeChatPrompt, composeFollowup, composeAction, composeActPlan, composeActExec } from '../shared/compose.mjs';
+import { UI, applyDom } from '../shared/i18n.mjs';
 
 const HOST_NAME = 'com.pagetalk.host';
 
@@ -29,7 +30,7 @@ let thinkText = '';
 let pendingEl = null;         // 等待首字的"打字中"占位
 let lockedTabId = null;       // 锁定的标签页 id(null = 跟随当前激活页)
 let lockedTitle = '';
-let lang = '中';              // 回答语言:'中' / 'EN'
+let lang = '中';              // 界面与回答语言:'中' / 'EN'
 let visionOn = false;         // 是否随消息附带当前屏幕截图
 let turnActive = false;       // 当前是否正在生成回答(用于"停止")
 let convo = [];               // 对话历史(持久化到 storage.local)
@@ -41,12 +42,15 @@ let actBusy = false;          // 放权任务进行中(计划/执行)
 let act = null;               // 当前放权任务对象(见 startActPlan)
 let webOn = false;            // 联网搜索模式(切换会重启聊天进程)
 
-// ---- 一键动作的指令文案 ----
-function actionInstruction(act, L) {
-  const out = L === 'EN' ? '\n\n请用英文输出。' : '\n\n请用中文输出。';
+// 文案查表(界面壳)。值为函数时传参调用。
+function L(k, ...a) { const v = (UI[lang] || UI['中'])[k]; return typeof v === 'function' ? v(...a) : v; }
+
+// ---- 一键动作的指令文案(发给 Claude 的提示词,不属界面,不随界面语言切)----
+function actionInstruction(act, ansLang) {
+  const out = ansLang === 'EN' ? '\n\n请用英文输出。' : '\n\n请用中文输出。';
   switch (act) {
     case 'summary':   return '请先判断这个网页的类型(新闻报道 / 学术论文 / 代码仓库 / 产品文档 / 论坛讨论 / 其他),再用最适合该类型的方式总结:论文突出研究方法与结论、代码仓库说明它是做什么的及如何使用、新闻给关键事实要点、讨论区提炼主要观点与共识。给出清晰的分点。' + out;
-    case 'translate': return L === 'EN'
+    case 'translate': return ansLang === 'EN'
       ? '请把这个网页的正文翻译成自然流畅的英文(若原文已是英文,则翻成简体中文),保持原有分段。'
       : '请把这个网页的正文翻译成自然流畅的简体中文(若原文已是中文,则翻成英文),保持原有分段。';
     case 'keypoints': return '请提炼这个网页最重要的 5–8 个要点,每条一句话,分点列出。' + out;
@@ -56,7 +60,6 @@ function actionInstruction(act, L) {
     default:          return '请处理这个网页。' + out;
   }
 }
-const ACTION_LABEL = { summary: '总结', translate: '翻译', keypoints: '要点', outline: '大纲', data: '挑数据', factcheck: '核查' };
 function langSuffix() { return lang === 'EN' ? '\n\n(Please answer in English.)' : ''; }
 
 // ---- 基础 UI ----
@@ -73,7 +76,8 @@ function addMessage(role, text) {
   wrap.className = 'msg ' + role;
   const r = document.createElement('div');
   r.className = 'role';
-  r.textContent = role === 'user' ? '我' : 'Claude';
+  if (role === 'user') { r.dataset.i18n = 'roleUser'; r.textContent = L('roleUser'); }
+  else { r.textContent = 'Claude'; }
   const b = document.createElement('div');
   b.className = 'bubble';
   wrap.appendChild(r);
@@ -119,11 +123,12 @@ function addCopyButton(wrap, text) {
   const btn = document.createElement('button');
   btn.className = 'copybtn';
   btn.type = 'button';
-  btn.textContent = '复制';
+  btn.dataset.i18n = 'copy';
+  btn.textContent = L('copy');
   btn.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(text); btn.textContent = '已复制'; }
-    catch (_) { btn.textContent = '复制失败'; }
-    setTimeout(() => { btn.textContent = '复制'; }, 1200);
+    try { await navigator.clipboard.writeText(text); btn.textContent = L('copied'); }
+    catch (_) { btn.textContent = L('copyFail'); }
+    setTimeout(() => { btn.textContent = L('copy'); }, 1200);
   });
   bar.appendChild(btn);
   wrap.appendChild(bar);
@@ -160,12 +165,12 @@ async function restoreConvo() {
 // ---- native 连接 ----
 function connect() {
   connected = false;
-  setStatus('连接中…');
+  setStatus(L('stConnecting'));
   let thisPort;
   try {
     thisPort = chrome.runtime.connectNative(HOST_NAME);
   } catch (e) {
-    setStatus('无法连接本地小帮手:' + String((e && e.message) || e), 'err');
+    setStatus(L('stConnectFail', String((e && e.message) || e)), 'err');
     return;
   }
   port = thisPort;
@@ -175,10 +180,10 @@ function connect() {
     const err = chrome.runtime.lastError;
     connected = false;
     clearTyping();
-    setStatus('未连接' + (err ? '(' + err.message + ')' : '') + ' — 请重跑 install.cmd 并彻底重启 Edge', 'err');
+    setStatus(L('stDisconnected', err ? err.message : ''), 'err');
   });
   connected = true;
-  setStatus('已连接 ✓', 'ok');
+  setStatus(L('stConnected'), 'ok');
 }
 
 function onHostMessage(msg) {
@@ -192,7 +197,7 @@ function onHostMessage(msg) {
   if (msg.type === 'web_state') {
     webOn = !!msg.web;
     $web.classList.toggle('on', webOn);
-    $web.title = webOn ? '联网搜索已开启(再点关闭)' : '联网搜索:让 Claude 上网查证(较慢,走你的订阅)';
+    $web.title = webOn ? L('webOnTitle') : L('webOffTitle');
     return;
   }
   // ---- 放权动手的事件 ----
@@ -226,11 +231,11 @@ function onHostMessage(msg) {
     const planText = (msg.text || act.planText || '').trim();
     act.plan = planText;
     if (!act.planEl) { act.planEl = addActPlanCard(); act.planBodyEl = act.planEl.querySelector('.plan-body'); }
-    renderMarkdown(act.planBodyEl, planText || '(未给出计划)');
+    renderMarkdown(act.planBodyEl, planText || L('noPlan'));
     act.thinkEl = null; act.thinkText = '';
     addApproveRow(act);
     setActBusy(false);
-    setStatus('计划就绪 — 请审阅后批准', 'ok');
+    setStatus(L('stPlanReady'), 'ok');
     return;
   }
   if (msg.type === 'act_tool') {
@@ -244,18 +249,18 @@ function onHostMessage(msg) {
     if (!act) return;
     clearTyping();
     const finalText = (msg.text || act.execText || '').trim();
-    if (act.execEl) { renderMarkdown(act.execEl, finalText || '(已执行)'); }
-    else { act.execEl = addMessage('assistant', ''); renderMarkdown(act.execEl, finalText || '(已执行)'); }
+    if (act.execEl) { renderMarkdown(act.execEl, finalText || L('execed')); }
+    else { act.execEl = addMessage('assistant', ''); renderMarkdown(act.execEl, finalText || L('execed')); }
     if (finalText) addCopyButton(act.execEl.parentElement, finalText);
-    recordHistory('assistant', '🛠 已执行:' + (finalText || ''));
+    recordHistory('assistant', L('execedPrefix') + (finalText || ''));
     act = null;
     setActBusy(false);
-    setStatus('动手完成 ✓', 'ok');
+    setStatus(L('stActDone'), 'ok');
     return;
   }
   if (msg.type === 'act_error') {
     clearTyping();
-    setStatus('动手出错:' + (msg.message || ''), 'err');
+    setStatus(L('stActError', msg.message || ''), 'err');
     setActBusy(false);
     return;
   }
@@ -263,7 +268,7 @@ function onHostMessage(msg) {
     clearTyping();
     act = null;
     setActBusy(false);
-    setStatus('已停止动手', 'ok');
+    setStatus(L('stActStopped'), 'ok');
     return;
   }
   if (msg.type === 'thinking') {
@@ -278,7 +283,7 @@ function onHostMessage(msg) {
       if (thinkEl) thinkEl.open = false;
       assistantEl = addMessage('assistant', '');
       assistantText = '';
-      setStatus('回答中…');
+      setStatus(L('stAnswering'));
     }
     assistantText += msg.text;
     renderMarkdown(assistantEl, assistantText);
@@ -292,10 +297,10 @@ function onHostMessage(msg) {
     recordHistory('assistant', finalText);
     resetTurnState();
     setTurnActive(false);
-    setStatus('已连接 ✓', 'ok');
+    setStatus(L('stConnected'), 'ok');
   } else if (msg.type === 'error') {
     clearTyping();
-    setStatus(msg.message || '出错', 'err');
+    setStatus(msg.message || L('stError'), 'err');
     resetTurnState();
     setTurnActive(false);
   }
@@ -309,7 +314,7 @@ async function getActiveTab() {
 async function targetTab() {
   if (lockedTabId != null) {
     try { return await chrome.tabs.get(lockedTabId); }
-    catch (_) { lockedTabId = null; lockedTitle = ''; refreshContext(); setStatus('锁定的标签页已关闭,已切回当前页', 'err'); }
+    catch (_) { lockedTabId = null; lockedTitle = ''; refreshContext(); setStatus(L('stLockedClosed'), 'err'); }
   }
   return await getActiveTab();
 }
@@ -317,22 +322,22 @@ async function refreshContext() {
   if (lockedTabId != null) {
     $ctxbar.classList.add('locked');
     $lock.textContent = '🔒';
-    $lock.title = '已锁定:切标签页不影响。点此解锁,跟随当前页';
-    $ctxtitle.textContent = lockedTitle || '(已锁定页面)';
+    $lock.title = L('lockedTitle');
+    $ctxtitle.textContent = lockedTitle || L('lockedPage');
     return;
   }
   $ctxbar.classList.remove('locked');
   $lock.textContent = '🔓';
-  $lock.title = '锁定当前页面(之后切标签页不影响)';
+  $lock.title = L('lockTitle');
   const tab = await getActiveTab();
-  $ctxtitle.textContent = (tab && (tab.title || tab.url)) || '当前页面…';
+  $ctxtitle.textContent = (tab && (tab.title || tab.url)) || L('ctxCurrent');
 }
 async function onLock() {
   if (lockedTabId != null) {
     lockedTabId = null; lockedTitle = '';
   } else {
     const tab = await getActiveTab();
-    if (!tab || !tab.id) { setStatus('没有可锁定的标签页', 'err'); return; }
+    if (!tab || !tab.id) { setStatus(L('stNoTabToLock'), 'err'); return; }
     lockedTabId = tab.id; lockedTitle = tab.title || tab.url || '';
   }
   refreshContext();
@@ -496,10 +501,10 @@ async function extractFromTab(tabId) {
 
 async function capturePage() {
   const tab = await targetTab();
-  if (!tab || !tab.id) throw new Error('没有活动标签页');
+  if (!tab || !tab.id) throw new Error(L('errNoActiveTab'));
   let page;
-  try { page = await extractFromTab(tab.id); } catch (_) { throw new Error('此页面无法读取内容'); }
-  if (!page) throw new Error('此页面无法读取内容');
+  try { page = await extractFromTab(tab.id); } catch (_) { throw new Error(L('errCantRead')); }
+  if (!page) throw new Error(L('errCantRead'));
   return page;
 }
 
@@ -508,19 +513,19 @@ async function onMultiTab() {
   try {
     const tabs = await chrome.tabs.query({ currentWindow: true });
     const httpTabs = tabs.filter((t) => t.id && /^https?:/i.test(t.url || ''));
-    if (httpTabs.length < 2) { setStatus('当前窗口可读网页不足 2 个', 'err'); return; }
+    if (httpTabs.length < 2) { setStatus(L('stNeed2'), 'err'); return; }
     const pick = httpTabs.slice(0, 8);
-    setStatus('正在读取 ' + pick.length + ' 个标签页…');
+    setStatus(L('stReadingTabs', pick.length));
     const pages = [];
     for (const t of pick) {
       try { const p = await extractFromTab(t.id); if (p && p.text) pages.push(p); } catch (_) {}
     }
-    if (!pages.length) { setStatus('没有读到任何可用网页内容', 'err'); return; }
+    if (!pages.length) { setStatus(L('stNoContent'), 'err'); return; }
     const per = Math.max(2000, Math.floor(20000 / pages.length));
     let body = '';
     pages.forEach((p, i) => { body += `\n\n===== 网页 ${i + 1}:${p.title || p.url} =====\n网址:${p.url}\n${(p.text || '').slice(0, per)}`; });
     const instr = (lang === 'EN' ? '请用英文' : '请用中文') + '对下面这几个网页做对比与综合:各自要点、共同点、关键差异。';
-    addMessage('user', '多页对比 · ' + pages.length + ' 个网页');
+    addMessage('user', L('multitabMsg', pages.length));
     sessionUrl = null;
     sendTurn(instr + body);
   } catch (e) {
@@ -531,7 +536,7 @@ async function onMultiTab() {
 function updateSendButton() {
   const busy = turnActive || actBusy;
   $send.textContent = busy ? '■' : '↑';
-  $send.title = busy ? '停止' : '发送';
+  $send.title = busy ? L('stop') : L('send');
   $send.classList.toggle('stop', busy);
 }
 function setTurnActive(b) { turnActive = b; updateSendButton(); }
@@ -542,16 +547,16 @@ function onStop() {
   if (assistantEl && assistantText) addCopyButton(assistantEl.parentElement, assistantText);
   resetTurnState();
   setTurnActive(false);
-  setStatus('已停止', 'ok');
+  setStatus(L('stStopped'), 'ok');
   sessionUrl = null;   // 重启了会话,下次需重新注入页面上下文
   connect();
 }
 
 function sendTurn(text, image) {
-  if (!port || !connected) { setStatus('未连接,请重开侧边栏或重跑 install.cmd', 'err'); return; }
+  if (!port || !connected) { setStatus(L('stNotConnectedReopen'), 'err'); return; }
   clearTyping();
   pendingEl = addTyping();
-  setStatus('思考中…(首次约 10 秒)');
+  setStatus(L('stThinking'));
   const m = { type: 'user_turn', text };
   if (image) m.image = image;
   port.postMessage(m);
@@ -559,12 +564,12 @@ function sendTurn(text, image) {
 }
 
 async function onAction(actName) {
-  if (turnActive) { setStatus('正在回答中,先点 ■ 停止', 'err'); return; }
-  if (actBusy) { setStatus('正在动手中,先点 ■ 停止', 'err'); return; }
+  if (turnActive) { setStatus(L('stBusyAnswer'), 'err'); return; }
+  if (actBusy) { setStatus(L('stBusyAct'), 'err'); return; }
   try {
     const page = await capturePage();
     const image = visionOn ? await captureScreenshot() : null;
-    addMessage('user', (image ? '📷 ' : '') + (ACTION_LABEL[actName] || actName) + ' · ' + (page.title || page.url));
+    addMessage('user', (image ? '📷 ' : '') + (L('chip_' + actName) || actName) + ' · ' + (page.title || page.url));
     sessionUrl = page.url;
     sendTurn(composeAction(page, actionInstruction(actName, lang)), image);
   } catch (e) {
@@ -573,8 +578,8 @@ async function onAction(actName) {
 }
 
 async function onSend() {
-  if (turnActive) { setStatus('正在回答中,先点 ■ 停止', 'err'); return; }
-  if (actBusy) { setStatus('正在动手中,先点 ■ 停止', 'err'); return; }
+  if (turnActive) { setStatus(L('stBusyAnswer'), 'err'); return; }
+  if (actBusy) { setStatus(L('stBusyAct'), 'err'); return; }
   const q = $input.value.trim();
   if (!q) return;
   $input.value = ''; $input.style.height = '';
@@ -593,7 +598,7 @@ async function onSend() {
   } catch (e) {
     addMessage('user', q);
     sendTurn(composeFollowup(q) + langSuffix());
-    setStatus('提示:此页无法读取内容,已按纯对话发送', 'err');
+    setStatus(L('stChatFallback'), 'err');
   }
 }
 
@@ -614,16 +619,31 @@ function onNewChat() {
 function toggleLang() {
   lang = lang === '中' ? 'EN' : '中';
   $lang.textContent = lang;
+  applyI18n();
+  try { chrome.storage.local.set({ defaultLang: lang }); } catch (_) {}   // 记住选择 + 同步设置页
+}
+
+// 整屏套用当前语言(静态钩子 + 依状态的动态文字)
+function applyI18n() {
+  document.documentElement.lang = lang === 'EN' ? 'en' : 'zh-CN';
+  applyDom(document, lang);
+  $web.title = webOn ? L('webOnTitle') : L('webOffTitle');
+  $vision.title = visionOn ? L('visionOnTitle') : L('visionOffTitle');
+  $actmode.title = L('actModeTitle');
+  $input.placeholder = actMode ? L('placeholderAct') : L('placeholder');
+  updateSendButton();
+  renderActDir();
+  refreshContext();
 }
 
 // ---- 联网搜索:切换会让 host 重启聊天进程(带/不带 Web 工具)----
 function toggleWeb() {
-  if (turnActive || actBusy) { setStatus('正在进行中,先点 ■ 停止再切换', 'err'); return; }
-  if (!port || !connected) { setStatus('未连接', 'err'); return; }
+  if (turnActive || actBusy) { setStatus(L('stBusySwitch'), 'err'); return; }
+  if (!port || !connected) { setStatus(L('stNotConnected'), 'err'); return; }
   const next = !webOn;
   try { port.postMessage({ type: 'set_web', web: next }); } catch (_) {}
   sessionUrl = null;   // 进程重启,下次提问需重新注入页面上下文
-  setStatus(next ? '已开启联网 — 下次提问可上网查证' : '已关闭联网', 'ok');
+  setStatus(next ? L('stWebOn') : L('stWebOff'), 'ok');
 }
 function openSettings() {
   try { chrome.runtime.openOptionsPage(); }
@@ -640,30 +660,28 @@ async function captureScreenshot() {
 function toggleVision() {
   visionOn = !visionOn;
   $vision.classList.toggle('on', visionOn);
-  $vision.title = visionOn ? '已开启:发送时附带当前屏幕截图' : '带截图(让它看这一屏)';
+  $vision.title = visionOn ? L('visionOnTitle') : L('visionOffTitle');
 }
 
 // ---- 放权动手:计划 → 批准 → 执行;只在工作目录内、不跑命令 ----
 function shortDir(d) {
-  if (!d) return '(未设置)';
+  if (!d) return L('dirUnset');
   const parts = d.replace(/[\\/]+$/, '').split(/[\\/]/);
   return parts.length > 2 ? '…' + (d.includes('\\') ? '\\' : '/') + parts.slice(-2).join(d.includes('\\') ? '\\' : '/') : d;
 }
 function renderActDir() {
-  $actdir.textContent = actDir || '(未设置)';
+  $actdir.textContent = actDir || L('dirUnset');
   $actdir.title = actDir || '';
 }
 function toggleActMode() {
   actMode = !actMode;
   $actmode.classList.toggle('on', actMode);
   $actbar.hidden = !actMode;
-  $input.placeholder = actMode
-    ? '让它在工作目录内做点什么…(先给计划,你批准后才动手)'
-    : '就这页问点什么…';
+  $input.placeholder = actMode ? L('placeholderAct') : L('placeholder');
   if (actMode) renderActDir();
 }
 function chooseActDir() {
-  const v = window.prompt('设置工作目录(绝对路径)。Claude 只能在此目录内读写文件,不会执行任何命令:', actDir || defaultActDir || '');
+  const v = window.prompt(L('chooseDirPrompt'), actDir || defaultActDir || '');
   if (v == null) return;
   const t = v.trim();
   if (!t) return;
@@ -677,7 +695,7 @@ function addActPlanCard() {
   card.className = 'actplan';
   const head = document.createElement('div');
   head.className = 'plan-head';
-  head.textContent = '📋 执行计划 · 请审阅(只在 ' + shortDir(actDir) + ' 内动文件,不跑命令)';
+  head.textContent = L('actPlanHead', shortDir(actDir));
   const body = document.createElement('div');
   body.className = 'plan-body';
   card.appendChild(head);
@@ -693,11 +711,12 @@ function addActTools() {
   scrollToBottom();
   return box;
 }
-const TOOL_VERB = { Write: '写入', Edit: '编辑', MultiEdit: '编辑', Read: '读取', Glob: '查找', Grep: '搜索' };
+const TOOL_VERB_KEY = { Write: 'verbWrite', Edit: 'verbEdit', MultiEdit: 'verbEdit', Read: 'verbRead', Glob: 'verbGlob', Grep: 'verbGrep' };
 function addToolLine(box, name, file) {
   const line = document.createElement('div');
   line.className = 'act-tool';
-  const verb = TOOL_VERB[name] || name;
+  const vk = TOOL_VERB_KEY[name];
+  const verb = vk ? L(vk) : name;
   const icon = (name === 'Write' || name === 'Edit' || name === 'MultiEdit') ? '✏️' : '🔎';
   const tail = file ? (' ' + file.split(/[\\/]/).pop()) : '';
   line.innerHTML = '<span>' + icon + '</span><span class="tn">' + verb + '</span><span>' + (tail || '') + '</span>';
@@ -708,32 +727,32 @@ function addApproveRow(a) {
   const row = document.createElement('div');
   row.className = 'approve';
   const go = document.createElement('button');
-  go.className = 'go'; go.type = 'button'; go.textContent = '✅ 批准执行';
+  go.className = 'go'; go.type = 'button'; go.textContent = L('approveGo');
   const no = document.createElement('button');
-  no.className = 'no'; no.type = 'button'; no.textContent = '✋ 取消';
+  no.className = 'no'; no.type = 'button'; no.textContent = L('approveNo');
   go.addEventListener('click', () => { if (act !== a) return; row.remove(); startActExec(a); });
-  no.addEventListener('click', () => { if (act !== a) return; row.remove(); act = null; setStatus('已取消该任务', 'ok'); });
+  no.addEventListener('click', () => { if (act !== a) return; row.remove(); act = null; setStatus(L('stTaskCancelled'), 'ok'); });
   row.appendChild(go); row.appendChild(no);
   a.planEl.appendChild(row);
   a.approveRow = row;
   scrollToBottom();
 }
 async function startActPlan() {
-  if (turnActive) { setStatus('正在回答中,先点 ■ 停止', 'err'); return; }
+  if (turnActive) { setStatus(L('stBusyAnswer'), 'err'); return; }
   if (actBusy) return;
-  if (!port || !connected) { setStatus('未连接,请重开侧边栏或重跑 install.cmd', 'err'); return; }
+  if (!port || !connected) { setStatus(L('stNotConnectedReopen'), 'err'); return; }
   const instruction = $input.value.trim();
-  if (!instruction) { setStatus('先写下你要它做什么', 'err'); return; }
-  if (!actDir) { setStatus('请先设置工作目录', 'err'); chooseActDir(); return; }
+  if (!instruction) { setStatus(L('stWriteInstr'), 'err'); return; }
+  if (!actDir) { setStatus(L('stSetDirFirst'), 'err'); chooseActDir(); return; }
   $input.value = ''; $input.style.height = '';
   let page = null;
   try { page = await capturePage(); } catch (_) {}
-  addMessage('user', '🛠 ' + instruction + (page && page.title ? '  ·  ' + page.title : ''));
+  addMessage('user', L('actMsgPrefix') + instruction + (page && page.title ? '  ·  ' + page.title : ''));
   act = { phase: 'plan', instruction, page, dir: actDir, planText: '', plan: '', planEl: null, planBodyEl: null, thinkEl: null, thinkText: '', execEl: null, execText: '', toolsEl: null };
   clearTyping();
   pendingEl = addTyping();
   setActBusy(true);
-  setStatus('正在拟定计划…');
+  setStatus(L('stPlanning'));
   port.postMessage({ type: 'act_plan', text: composeActPlan(page, instruction, actDir), cwd: actDir });
 }
 function startActExec(a) {
@@ -742,7 +761,7 @@ function startActExec(a) {
   clearTyping();
   pendingEl = addTyping();
   setActBusy(true);
-  setStatus('执行中…(只在工作目录内动文件)');
+  setStatus(L('stExecuting'));
   port.postMessage({ type: 'act_exec', text: composeActExec(a.page, a.instruction, a.plan, a.dir), cwd: a.dir });
 }
 function cancelAct() {
@@ -752,14 +771,14 @@ function cancelAct() {
   if (act && act.execEl && act.execText) addCopyButton(act.execEl.parentElement, act.execText);
   act = null;
   setActBusy(false);
-  setStatus('已停止动手', 'ok');
+  setStatus(L('stActStopped'), 'ok');
 }
 
 // ---- 选中即问(右键菜单 → 通过 storage.session 传到这里)----
 let lastAskTs = 0;
 let lastActionTs = 0;
 function askAboutSelection(selText) {
-  const label = '选中提问 · ' + (selText.length > 40 ? selText.slice(0, 40) + '…' : selText);
+  const label = L('selAskLabel', selText.length > 40 ? selText.slice(0, 40) + '…' : selText);
   addMessage('user', label);
   const instr = '请基于我从网页选中的这段文字回答或解释(若是问题就回答它,若是陈述就解释要点):\n\n「' + selText.slice(0, 8000) + '」';
   sendTurn(instr + langSuffix());
@@ -825,7 +844,7 @@ if (chrome.storage && chrome.storage.onChanged) {
     if (area === 'local') {   // 设置页改了 → 实时同步
       if (changes.actDir) { actDir = changes.actDir.newValue || ''; renderActDir(); }
       if (changes.defaultLang && (changes.defaultLang.newValue === '中' || changes.defaultLang.newValue === 'EN')) {
-        lang = changes.defaultLang.newValue; $lang.textContent = lang;
+        lang = changes.defaultLang.newValue; $lang.textContent = lang; applyI18n();
       }
     }
   });
@@ -838,17 +857,18 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
   else if (lockedTabId === tabId && info.title) { lockedTitle = info.title; refreshContext(); }
 });
 
-async function initSettings() {
+async function boot() {
+  let defaultWeb = false;
   try {
     const s = await chrome.storage.local.get(['actDir', 'defaultLang', 'defaultWeb']);
     if (s.actDir) actDir = s.actDir;
     if (s.defaultLang === 'EN' || s.defaultLang === '中') { lang = s.defaultLang; $lang.textContent = lang; }
-    renderActDir();
-    if (s.defaultWeb && port && connected) { try { port.postMessage({ type: 'set_web', web: true }); } catch (_) {} }
-  } catch (_) { renderActDir(); }
+    defaultWeb = !!s.defaultWeb;
+  } catch (_) {}
+  applyI18n();          // 先按语言把界面套好,再连接(状态文字才是对的语言)
+  connect();
+  refreshContext();
+  if (defaultWeb && port && connected) { try { port.postMessage({ type: 'set_web', web: true }); } catch (_) {} }
+  restoreConvo().then(consumePending);
 }
-
-connect();
-refreshContext();
-initSettings();
-restoreConvo().then(consumePending);
+boot();

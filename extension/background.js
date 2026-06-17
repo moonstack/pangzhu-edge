@@ -3,15 +3,27 @@ chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch((e) => console.error('setPanelBehavior failed', e));
 
-// 右键"问 PageTalk"(选中文字时可用)
-chrome.runtime.onInstalled.addListener(() => {
+// 右键"问旁注"(选中文字时可用)。标题随界面语言切换。
+const MENU_TITLE = { '中': '问旁注:“%s”', 'EN': 'Ask Marginalia: “%s”' };
+function menuTitleFor(lang) { return MENU_TITLE[lang === 'EN' ? 'EN' : '中']; }
+
+async function ensureMenu() {
+  let lang = '中';
+  try { const s = await chrome.storage.local.get('defaultLang'); if (s.defaultLang === 'EN') lang = 'EN'; } catch (_) {}
   chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: 'pagetalk-ask',
-      title: '问 PageTalk:“%s”',
-      contexts: ['selection'],
-    });
+    chrome.contextMenus.create({ id: 'pagetalk-ask', title: menuTitleFor(lang), contexts: ['selection'] });
   });
+}
+
+chrome.runtime.onInstalled.addListener(ensureMenu);
+if (chrome.runtime.onStartup) chrome.runtime.onStartup.addListener(ensureMenu);
+
+// 语言切了 → 同步更新右键菜单标题
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.defaultLang) {
+    const lang = changes.defaultLang.newValue === 'EN' ? 'EN' : '中';
+    try { chrome.contextMenus.update('pagetalk-ask', { title: menuTitleFor(lang) }); } catch (_) {}
+  }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {

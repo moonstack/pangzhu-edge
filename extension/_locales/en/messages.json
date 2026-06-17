@@ -1,0 +1,6 @@
+{
+  "extName": { "message": "旁注 (Marginalia)" },
+  "extDesc": { "message": "Local Claude in the Edge sidebar: summarize, translate, compare pages, vision, web search — all on your own subscription." },
+  "actionTitle": { "message": "Open 旁注 (Marginalia)" },
+  "cmdSummarize": { "message": "Open 旁注 and summarize this page" }
+}

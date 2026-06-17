@@ -1,0 +1,6 @@
+{
+  "extName": { "message": "旁注" },
+  "extDesc": { "message": "在 Edge 侧边栏里用本地 Claude 读当前网页:总结 / 翻译 / 看图 / 多页对比 / 放权动手 / 联网搜索,纯本地、走你的订阅" },
+  "actionTitle": { "message": "打开旁注" },
+  "cmdSummarize": { "message": "打开旁注并总结当前网页" }
+}

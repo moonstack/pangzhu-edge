@@ -1,22 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "旁注",
-  "version": "0.5.0",
-  "description": "在 Edge 侧边栏里用本地 Claude 读当前网页:总结 / 翻译 / 看图 / 多页对比 / 放权动手 / 联网搜索,纯本地、走你的订阅",
-  "permissions": ["sidePanel", "nativeMessaging", "activeTab", "scripting", "tabs", "contextMenus", "storage"],
+  "default_locale": "en",
+  "name": "__MSG_extName__",
+  "version": "0.6.0",
+  "description": "__MSG_extDesc__",
+  "permissions": ["sidePanel", "nativeMessaging", "scripting", "tabs", "contextMenus", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "side_panel": { "default_path": "sidepanel/sidepanel.html" },
   "options_ui": { "page": "options/options.html", "open_in_tab": true },
   "action": {
-    "default_title": "打开旁注",
+    "default_title": "__MSG_actionTitle__",
     "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
   },
   "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
   "commands": {
     "summarize": {
       "suggested_key": { "default": "Ctrl+Shift+S" },
-      "description": "打开旁注并总结当前网页"
+      "description": "__MSG_cmdSummarize__"
     }
   }
 }
